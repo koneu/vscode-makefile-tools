@@ -399,43 +399,92 @@ export function spawnChildProcess(
         `integrated.automationShell.${shellPlatform}`
       ); // and replaced with automationProfile
 
-    if (typeof shellType === "object") {
-      shellType = shellType["path"];
-    }
-
     // Final quoting decisions for process name and args before being executed.
     let qProcessName: string = options.ensureQuoted
       ? quoteStringIfNeeded(processName)
       : processName;
+
     let qArgs: string[] = options.ensureQuoted
       ? args.map((arg) => {
           return quoteStringIfNeeded(arg);
         })
       : args;
 
-    if (options.ensureQuoted) {
-      logger.message(
-        localize(
-          "utils.quoting",
-          "Spawning child process with:\n process name: {0}\n process args: {1}\n working directory: {2}\n shell type: {3}",
-          qProcessName,
-          qArgs.join(","),
-          options.workingDirectory,
-          shellType || "default"
-        ),
-        "Debug"
-      );
+    let child: child_process.ChildProcess;
+    if (typeof shellType !== "object") {
+      // no profile specified -> start process on default shell
+      if (options.ensureQuoted) {
+        logger.message(
+          localize(
+            "utils.quoting",
+            "Spawning child process with:\n process name: {0}\n process args: {1}\n working directory: {2}\n shell type: {3}",
+            qProcessName,
+            qArgs.join(","),
+            options.workingDirectory,
+            "default"
+          ),
+          "Debug"
+        );
+      }
+
+      child = child_process.spawn(qProcessName, qArgs, {
+        cwd: options.workingDirectory,
+        shell: true,
+        env: finalEnvironment,
+      });
+    } else {
+      const args = (shellType["args"] as string[]) ?? [];
+      let env = (shellType["env"] as EnvironmentVariables) ?? {};
+      env = { ...finalEnvironment, ...env };
+      if (args.length > 0) {
+        // automation profile with args specified, child_process.spawn dow not support
+        //  args for shell so have to start the process in the specified shell manually
+        if (options.ensureQuoted) {
+          logger.message(
+            localize(
+              "utils.quoting",
+              "Spawning child process with:\n process name: {0}\n process args: {1}\n working directory: {2}",
+              shellType["path"],
+              args.join(" ") + " -c " + qProcessName + qArgs.join(","),
+              options.workingDirectory
+            ),
+            "Debug"
+          );
+        }
+        logger.message(JSON.stringify(env), "Debug");
+        child = child_process.spawn(
+          shellType["path"],
+          [args.join(" "), " -c ", qProcessName + " " + qArgs.join(" ")],
+          {
+            cwd: options.workingDirectory,
+            shell: true,
+            env: env,
+          }
+        );
+      } else {
+        // automation profile but no args
+        if (options.ensureQuoted) {
+          logger.message(
+            localize(
+              "utils.quoting",
+              "Spawning child process with:\n process name: {0}\n process args: {1}\n working directory: {2}\n shell type: {3}",
+              qProcessName,
+              qArgs.join(","),
+              options.workingDirectory,
+              shellType
+            ),
+            "Debug"
+          );
+        }
+
+        child = child_process.spawn(qProcessName, qArgs, {
+          cwd: options.workingDirectory,
+          shell: shellType["path"] || true,
+          env: env,
+        });
+      }
     }
 
-    const child: child_process.ChildProcess = child_process.spawn(
-      qProcessName,
-      qArgs,
-      {
-        cwd: options.workingDirectory,
-        shell: shellType || true,
-        env: finalEnvironment,
-      }
-    );
     if (child.pid) {
       make.setCurPID(child.pid);
     }
