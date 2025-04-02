@@ -6,7 +6,6 @@ name: Build VSIX
 # events but only for the master branch
 on:
   workflow_dispatch:
-     inputs:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -25,6 +24,7 @@ jobs:
         with:
           node-version: '20'
           check-latest: true
+          
       - name: Get Short SHA
         id: get-short-sha
         run: echo "::set-output name=sha::$(git rev-parse --short ${GITHUB_SHA})"
@@ -37,15 +37,17 @@ jobs:
           include: "package.json"
           exclude: ".git"
 
-    # Runs a single command using the runners shell
+      # Runs a single command using the runners shell
       - name: Build the VSIX
         run: |
           yarn install
+          yarn compile
           yarn run package
-          
+
       - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v2.1.4
+        uses: actions/upload-artifact@v4
         with:
           name: makefile-tools.vsix
-          path: ./makefile-tools.vsix
+          path: makefile-tools.vsix
           if-no-files-found: error
+          
